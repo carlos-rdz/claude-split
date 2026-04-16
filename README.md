@@ -27,69 +27,39 @@ You're deep in a Claude Code session, context window is 80% full, and you still 
 - A **CLI** both sessions can call to coordinate
 - Zero dependencies, zero config, zero servers required
 
-## Install
+## Get Started (1 minute)
 
 ```bash
-npx claude-split init
+git clone https://github.com/carlos-rdz/claude-split.git
+cd claude-split
+./setup.sh
 ```
 
-That's it. Creates `.claude/split/` in your repo with everything both sessions need.
+That's it. Setup checks your dependencies, initializes your repo, starts the monitor, opens two terminal windows with Claude, and does the handshake automatically.
 
-## Quick Start (2 minutes)
-
-### 1. Initialize in your repo
+### Or, manual setup:
 
 ```bash
-cd your-project
+# In your project repo:
 npx claude-split init
-```
 
-### 2. Connect two sessions
-
-**Terminal A:**
-```bash
+# Terminal A:
 npx claude-split ping --name alpha
-# [alpha] Pinging... waiting for partner
-```
+claude
+# Tell Claude: "Read .claude/split/README.md — I'm alpha."
 
-**Terminal B:**
-```bash
+# Terminal B:
 npx claude-split ping --name beta
-# [beta] Partner found: alpha
-# [beta] GREEN LIGHT — both sessions ready
-```
-
-### 3. Start Claude in both terminals
-
-**Terminal A:**
-```bash
 claude
-# Then say: "Read .claude/split/README.md. I'm alpha. Pick up open tasks."
+# Tell Claude: "Read .claude/split/README.md — I'm beta."
 ```
 
-**Terminal B:**
-```bash
-claude
-# Then say: "Read .claude/split/README.md. I'm beta. Pick up open tasks."
-```
-
-### 4. Add tasks and track progress
+## Track work
 
 ```bash
-npx claude-split claim "Fix authentication bugs" --name alpha
-npx claude-split claim "Write integration tests" --name beta
+npx claude-split claim "Fix auth bugs" --name alpha
+npx claude-split claim "Write tests" --name beta
 npx claude-split status
-
-# === Claude Split Status ===
-#
-# Sessions:
-#   alpha: active (last seen 2s ago)
-#   beta: active (last seen 5s ago)
-#
-# In progress (2):
-#   [~] task-1: Fix authentication bugs (alpha)
-#   [~] task-2: Write integration tests (beta)
-
 npx claude-split done task-1 --name alpha
 ```
 
@@ -159,6 +129,9 @@ claude
 | `status` | Show sessions, tasks, recent activity |
 | `claim "desc" --name X` | Create and claim a task |
 | `done task-1 --name X` | Mark task complete |
+| `launch` | Open two terminal windows with Claude |
+| `monitor start\|stop\|status` | Session monitor server |
+| `doctor` | Check all dependencies |
 | `serve` | Start HTTP coordination server (optional) |
 
 ## Coordination Server (Optional)

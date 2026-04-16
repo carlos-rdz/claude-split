@@ -1,49 +1,61 @@
 #!/usr/bin/env node
 
 import { parseArgs } from "node:util";
-import { init } from "../src/init.js";
-import { status } from "../src/status.js";
-import { claim } from "../src/claim.js";
-import { done } from "../src/done.js";
-import { server } from "../src/server.js";
-import { ping, pong, checkReady, reset } from "../src/handshake.js";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     help: { type: "boolean", short: "h" },
+    version: { type: "boolean", short: "v" },
     port: { type: "string", short: "p", default: "7433" },
     name: { type: "string", short: "n" },
+    single: { type: "boolean" },
   },
 });
 
 const command = positionals[0];
 
 const HELP = `
-claude-split — coordinate multiple Claude Code sessions
+  claude-split v${pkg.version}
+  Run two Claude Code sessions on the same codebase. No conflicts.
 
-Commands:
-  init              Set up claude-split in current repo (.claude/split/)
-  ping              Register and wait for partner session (green light)
-  pong              Respond to a waiting session
-  ready             Check if both sessions are connected
-  reset             Clear handshake state
-  status            Show who's working on what
-  claim <task>      Claim a task for your session
-  done [task]       Mark task complete, update status
-  serve             Start coordination server
+  ${"\x1b[1m"}Setup:${"\x1b[0m"}
+    ./setup.sh                Full guided setup (recommended)
+    init                      Set up .claude/split/ in current repo
 
-Options:
-  -n, --name        Session name (default: random)
-  -p, --port        Server port (default: 7433)
-  -h, --help        Show this help
+  ${"\x1b[1m"}Handshake:${"\x1b[0m"}
+    ping --name <n>           Register + wait for partner (GREEN LIGHT)
+    ready                     Check: RED / YELLOW / GREEN
+    reset                     Clear handshake, start fresh
 
-Quick start:
-  1. cd your-repo && npx claude-split init
-  2. Terminal A: npx claude-split ping --name alpha
-  3. Terminal B: npx claude-split ping --name beta
-  4. Both get GREEN LIGHT — start working
+  ${"\x1b[1m"}Tasks:${"\x1b[0m"}
+    status                    Who's working on what
+    claim "desc" --name <n>   Create and claim a task
+    done <task-id> --name <n> Mark complete
+
+  ${"\x1b[1m"}Advanced:${"\x1b[0m"}
+    launch [--single]         Open terminal windows with Claude
+    monitor <start|stop|status>  Session monitor server
+    serve [--port 7433]       HTTP coordination server
+    doctor                    Check all dependencies
+
+  ${"\x1b[1m"}Options:${"\x1b[0m"}
+    -n, --name      Session name (default: random)
+    -p, --port      Server port
+    -v, --version   Show version
+    -h, --help      Show this help
 `;
+
+if (values.version) {
+  console.log(`claude-split v${pkg.version}`);
+  process.exit(0);
+}
 
 if (values.help || !command) {
   console.log(HELP);
@@ -51,34 +63,67 @@ if (values.help || !command) {
 }
 
 switch (command) {
-  case "init":
+  case "init": {
+    const { init } = await import("../src/init.js");
     await init();
     break;
-  case "ping":
+  }
+  case "ping": {
+    const { ping } = await import("../src/handshake.js");
     await ping(values.name);
     break;
-  case "pong":
+  }
+  case "pong": {
+    const { pong } = await import("../src/handshake.js");
     await pong(values.name);
     break;
-  case "ready":
+  }
+  case "ready": {
+    const { checkReady } = await import("../src/handshake.js");
     await checkReady();
     break;
-  case "reset":
+  }
+  case "reset": {
+    const { reset } = await import("../src/handshake.js");
     await reset();
     break;
-  case "status":
+  }
+  case "status": {
+    const { status } = await import("../src/status.js");
     await status();
     break;
-  case "claim":
+  }
+  case "claim": {
+    const { claim } = await import("../src/claim.js");
     await claim(positionals[1], values.name);
     break;
-  case "done":
+  }
+  case "done": {
+    const { done } = await import("../src/done.js");
     await done(positionals[1], values.name);
     break;
-  case "serve":
+  }
+  case "launch": {
+    const { launch } = await import("../src/launch.js");
+    await launch({ single: values.single });
+    break;
+  }
+  case "monitor": {
+    const { monitorCtl } = await import("../src/monitor-ctl.js");
+    await monitorCtl(positionals[1], parseInt(values.port) || 8765);
+    break;
+  }
+  case "serve": {
+    const { server } = await import("../src/server.js");
     await server(parseInt(values.port));
     break;
+  }
+  case "doctor": {
+    const { doctor } = await import("../src/doctor.js");
+    await doctor();
+    break;
+  }
   default:
-    console.error(`Unknown command: ${command}`);
+    console.error(`Unknown command: ${command}\nRun claude-split --help for usage.`);
     process.exit(1);
 }
