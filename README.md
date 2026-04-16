@@ -141,9 +141,16 @@ That's it. Two commands. Everything else happens through the inbox files.
 
 ## Monitor Dashboard
 
-Want a live web dashboard showing agent status, pending tasks, and message flow?
+![claude-split-monitor dashboard](docs/monitor-screenshot.png)
 
-See [claude-split-monitor](https://github.com/carlos-rdz/claude-split-monitor) — a standalone companion app.
+Live dashboard showing agent status, token spend, task distribution, and message flow:
+
+```bash
+pip install claude-split-monitor
+claude-split-monitor
+```
+
+See [claude-split-monitor](https://github.com/carlos-rdz/claude-split-monitor).
 
 ## License
 
