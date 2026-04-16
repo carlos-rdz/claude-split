@@ -13,9 +13,7 @@ const { positionals, values } = parseArgs({
   options: {
     help: { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
-    port: { type: "string", short: "p", default: "7433" },
-    name: { type: "string", short: "n" },
-    single: { type: "boolean" },
+    "executor-dir": { type: "string" },
   },
 });
 
@@ -23,33 +21,23 @@ const command = positionals[0];
 
 const HELP = `
   claude-split v${pkg.version}
-  Run two Claude Code sessions on the same codebase. No conflicts.
+  Two Claude sessions. One codebase. No conflicts.
 
-  ${"\x1b[1m"}Setup:${"\x1b[0m"}
-    ./setup.sh                Full guided setup (recommended)
-    init                      Set up .claude/split/ in current repo
-
-  ${"\x1b[1m"}Handshake:${"\x1b[0m"}
-    ping --name <n>           Register + wait for partner (GREEN LIGHT)
-    ready                     Check: RED / YELLOW / GREEN
-    reset                     Clear handshake, start fresh
-
-  ${"\x1b[1m"}Tasks:${"\x1b[0m"}
-    status                    Who's working on what
-    claim "desc" --name <n>   Create and claim a task
-    done <task-id> --name <n> Mark complete
-
-  ${"\x1b[1m"}Advanced:${"\x1b[0m"}
-    launch [--single]         Open terminal windows with Claude
-    monitor <start|stop|status>  Session monitor server
-    serve [--port 7433]       HTTP coordination server
-    doctor                    Check all dependencies
+  ${"\x1b[1m"}Commands:${"\x1b[0m"}
+    init [--executor-dir path]   Set up inboxes, worktree, inject CLAUDE.md
+    status                       Show pending and ACK'd messages
 
   ${"\x1b[1m"}Options:${"\x1b[0m"}
-    -n, --name      Session name (default: random)
-    -p, --port      Server port
     -v, --version   Show version
     -h, --help      Show this help
+
+  ${"\x1b[1m"}Workflow:${"\x1b[0m"}
+    1. npx claude-split init
+    2. Open Planner session in project root
+    3. Open Executor session in worktree
+    4. Planner writes tasks to inbox-executor.md
+    5. Executor reads, implements, writes results to inbox-planner.md
+    6. npx claude-split status   (human view)
 `;
 
 if (values.version) {
@@ -65,62 +53,12 @@ if (values.help || !command) {
 switch (command) {
   case "init": {
     const { init } = await import("../src/init.js");
-    await init();
-    break;
-  }
-  case "ping": {
-    const { ping } = await import("../src/handshake.js");
-    await ping(values.name);
-    break;
-  }
-  case "pong": {
-    const { pong } = await import("../src/handshake.js");
-    await pong(values.name);
-    break;
-  }
-  case "ready": {
-    const { checkReady } = await import("../src/handshake.js");
-    await checkReady();
-    break;
-  }
-  case "reset": {
-    const { reset } = await import("../src/handshake.js");
-    await reset();
+    await init({ executorDir: values["executor-dir"] || ".claude/worktrees/executor" });
     break;
   }
   case "status": {
     const { status } = await import("../src/status.js");
     await status();
-    break;
-  }
-  case "claim": {
-    const { claim } = await import("../src/claim.js");
-    await claim(positionals[1], values.name);
-    break;
-  }
-  case "done": {
-    const { done } = await import("../src/done.js");
-    await done(positionals[1], values.name);
-    break;
-  }
-  case "launch": {
-    const { launch } = await import("../src/launch.js");
-    await launch({ single: values.single });
-    break;
-  }
-  case "monitor": {
-    const { monitorCtl } = await import("../src/monitor-ctl.js");
-    await monitorCtl(positionals[1], parseInt(values.port) || 8765);
-    break;
-  }
-  case "serve": {
-    const { server } = await import("../src/server.js");
-    await server(parseInt(values.port));
-    break;
-  }
-  case "doctor": {
-    const { doctor } = await import("../src/doctor.js");
-    await doctor();
     break;
   }
   default:

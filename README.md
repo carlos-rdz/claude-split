@@ -1,228 +1,144 @@
 # claude-split
 
-**Run two Claude Code sessions on the same codebase. No conflicts. No wasted tokens.**
+**Two Claude Code sessions. One codebase. No conflicts.**
 
 ```
-Terminal A                          Terminal B
-┌─────────────────────┐            ┌─────────────────────┐
-│ claude-split ping    │            │ claude-split ping    │
-│ --name alpha         │───────────│ --name beta          │
-│                      │  GREEN    │                      │
-│ "Fix auth module"    │  LIGHT    │ "Write test suite"   │
-│                      │           │                      │
-│ src/auth/*           │           │ src/__tests__/*      │
-└─────────────────────┘            └─────────────────────┘
+Planner                              Executor
+┌──────────────────────┐            ┌──────────────────────┐
+│ Decides what to do   │            │ Implements tasks     │
+│                      │            │                      │
+│ Writes tasks to ─────┼──────────→ │ inbox-executor.md    │
+│                      │            │                      │
+│ inbox-planner.md ←───┼────────── │ Writes results back  │
+└──────────────────────┘            └──────────────────────┘
          │                                   │
-         └───────── state.json ──────────────┘
-              (shared task tracker)
+         └──── no shared state ──────────────┘
+              one writer per file
 ```
 
 ## The Problem
 
-You're deep in a Claude Code session, context window is 80% full, and you still have work to do. You start a second session but now they're stepping on each other's files, duplicating work, and you're playing messenger between two terminals.
+You run out of tokens on one Claude session. You start a second one. Now they're editing the same files, duplicating work, and you're playing messenger.
 
-**claude-split** fixes this with:
-- A **handshake** so both sessions confirm they're connected before starting
-- A **shared state file** tracking who owns what files and tasks
-- A **CLI** both sessions can call to coordinate
-- Zero dependencies, zero config, zero servers required
-
-## Get Started (1 minute)
-
-```bash
-git clone https://github.com/carlos-rdz/claude-split.git
-cd claude-split
-./setup.sh
-```
-
-That's it. Setup checks your dependencies, initializes your repo, starts the monitor, opens two terminal windows with Claude, and does the handshake automatically.
-
-### Or, manual setup:
-
-```bash
-# In your project repo:
-npx claude-split init
-
-# Terminal A:
-npx claude-split ping --name alpha
-claude
-# Tell Claude: "Read .claude/split/README.md — I'm alpha."
-
-# Terminal B:
-npx claude-split ping --name beta
-claude
-# Tell Claude: "Read .claude/split/README.md — I'm beta."
-```
-
-## Track work
-
-```bash
-npx claude-split claim "Fix auth bugs" --name alpha
-npx claude-split claim "Write tests" --name beta
-npx claude-split status
-npx claude-split done task-1 --name alpha
-```
+**claude-split** gives each session a role, a one-way inbox, and gets out of the way.
 
 ## How It Works
 
-### The Handshake
+Two roles. Two inbox files. No shared mutable state.
 
-Before any work starts, both sessions do a ping. The first session waits, the second connects, both get a GREEN LIGHT. This prevents the "is the other session even running?" problem.
+- **Planner** — decides what to do, writes tasks to `inbox-executor.md`
+- **Executor** — implements tasks, writes results to `inbox-planner.md`
 
-```
-RED    → no sessions registered
-YELLOW → one session waiting for partner
-GREEN  → both connected, start working
-```
+Each session reads its inbox on startup, acts on unACK'd messages, appends `[ACK]` when done. That's the entire protocol.
+
+Messages are append-only markdown. If a session dies, unACK'd messages survive as pending work. The next session picks them up.
+
+## Get Started
 
 ```bash
-npx claude-split ready    # check status anytime
-npx claude-split reset    # clear and start over
+npx claude-split init
 ```
 
-### The State File
+This creates:
+- `.claude/split/inbox-planner.md` — Executor writes here
+- `.claude/split/inbox-executor.md` — Planner writes here
+- A git worktree for the Executor (isolated branch, no file conflicts)
+- Injects split config into `CLAUDE.md` for both roles
 
-`.claude/split/state.json` is the single source of truth:
+Then open two sessions:
 
-```json
-{
-  "sessions": {
-    "alpha": { "lastSeen": "2025-...", "currentTask": "task-1" },
-    "beta": { "lastSeen": "2025-...", "currentTask": "task-2" }
-  },
-  "tasks": [
-    { "id": "task-1", "description": "Fix auth", "owner": "alpha", "status": "claimed" },
-    { "id": "task-2", "description": "Tests", "owner": "beta", "status": "claimed" }
-  ],
-  "log": [...]
-}
-```
-
-Both Claude sessions read this file to know what's happening. They update it when they claim or finish tasks.
-
-### The README Inside Your Repo
-
-`npx claude-split init` creates `.claude/split/README.md` — instructions written *for Claude*. When you tell Claude "Read .claude/split/README.md", it learns the rules:
-
-1. Check state.json before doing anything
-2. Never edit files another session owns
-3. Update state.json when you start, finish, or run out of context
-
-### When a Session Dies
-
-Claude sessions run out of tokens. It happens. The surviving session checks state.json and git log to see what the dead session accomplished, then picks up the remaining work.
-
-Start a replacement session:
 ```bash
+# Terminal A (Planner) — project root
 claude
-# "Read .claude/split/README.md. Pick up unfinished work."
+
+# Terminal B (Executor) — worktree
+cd .claude/worktrees/executor && claude
 ```
+
+Each Claude session reads its CLAUDE.md on startup and knows:
+1. What role it has
+2. Where its inbox is
+3. Where to write messages for the other session
+4. To ACK messages after acting on them
+
+## Message Format
+
+```markdown
+## MSG-20260416-001
+**From:** planner
+**Type:** task
+**Priority:** p0
+
+Fix the discount codes — MAGA20 and EAGLE15 are displayed
+on ad landing pages but missing from src/lib/discounts.ts.
+Add them to DISCOUNT_MAP.
+
+[ACK - executor]
+---
+```
+
+Types: `task` | `result` | `question` | `block`
+
+- **task** — Planner assigns work to Executor
+- **result** — Executor reports back what was done
+- **question** — Executor needs a judgment call from Planner
+- **block** — either session is stuck, needs help
+
+## Check Status (Humans Only)
+
+```bash
+npx claude-split status
+```
+
+```
+  claude-split status
+
+  Planner inbox (3 total, 1 pending)
+  Pending:
+    [RSLT] MSG-20260416-003: Fixed discount codes, tsc clean, pushed !!
+  History:
+    ✓ MSG-20260416-001: Auth module refactored [executor]
+    ✓ MSG-20260416-002: Tests passing, 94% coverage [executor]
+
+  Executor inbox (2 total, 0 pending)
+  History:
+    ✓ MSG-20260416-001: Fix discount codes in src/lib/discounts.ts [planner]
+    ✓ MSG-20260416-002: Add biometric consent checkbox [planner]
+
+  All messages ACK'd
+```
+
+Claude sessions never call `status`. This is for you.
+
+## Why Not state.json?
+
+| Problem | state.json | inbox files |
+|---------|-----------|-------------|
+| Two writers | lock races | impossible — one writer per file |
+| Session dies mid-task | state stuck "in progress" | unACK'd message = pending |
+| Agent forgets to call `done` | broken state | no runtime commands needed |
+| Audit trail | must build separately | inbox IS the log |
+
+## When a Session Dies
+
+1. Start a new session in the same terminal
+2. Claude reads CLAUDE.md, sees its role
+3. Reads its inbox, finds unACK'd messages
+4. Picks up where the dead session left off
+
+No cleanup needed. No stale locks. No orphaned state.
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `init` | Set up claude-split in current repo |
-| `ping --name X` | Register session, wait for partner |
-| `ready` | Check handshake status (RED/YELLOW/GREEN) |
-| `reset` | Clear handshake, start fresh |
-| `status` | Show sessions, tasks, recent activity |
-| `claim "desc" --name X` | Create and claim a task |
-| `done task-1 --name X` | Mark task complete |
-| `launch` | Open two terminal windows with Claude |
-| `monitor start\|stop\|status` | Session monitor server |
-| `doctor` | Check all dependencies |
-| `serve` | Start HTTP coordination server (optional) |
-
-## Coordination Server (Optional)
-
-For real-time coordination, run the built-in HTTP server:
-
 ```bash
-npx claude-split serve --port 7433
+claude-split init      # set up inboxes + worktree + CLAUDE.md injection
+claude-split status    # show pending/ACK'd messages (human view)
+claude-split --version
+claude-split --help
 ```
 
-Both sessions can coordinate via HTTP:
-
-```bash
-curl localhost:7433/state                    # get current state
-curl -X POST localhost:7433/claim \
-  -d '{"session":"alpha","description":"Fix bug"}'
-curl -X POST localhost:7433/done \
-  -d '{"taskId":"task-1"}'
-curl -X POST localhost:7433/message \
-  -d '{"from":"alpha","text":"Done with auth, starting API"}'
-```
-
-## Best Practices
-
-### Split by directory, not by role
-
-```
-alpha owns: src/app/, src/components/
-beta owns:  src/lib/, src/__tests__/
-```
-
-Don't split by "you do backend, I do frontend." Split by files to prevent conflicts.
-
-### Use git worktrees for isolation
-
-```bash
-# Terminal A
-claude --worktree feature-auth
-
-# Terminal B
-claude --worktree feature-tests
-```
-
-Each session gets its own branch. Merge when done. Zero conflict risk.
-
-### Keep tasks small
-
-Big tasks = wasted tokens if a session dies mid-task. Small tasks = easy handoff.
-
-```bash
-# Too big
-npx claude-split claim "Refactor entire auth system" --name alpha
-
-# Just right
-npx claude-split claim "Fix password validation in src/auth/validate.ts" --name alpha
-npx claude-split claim "Add rate limiting to src/auth/login.ts" --name alpha
-```
-
-### Let the dying session update state
-
-When you notice a session running low on context, tell it:
-> "Update .claude/split/state.json with what you've done and what's left, then stop."
-
-## Claude Monitor Integration
-
-If you use [claude-monitor](https://github.com/carlos-rdz/claude-monitor), the cowork status shows up automatically in your menu bar:
-
-```
-👥 Split: alpha + beta (GREEN)
-```
-
-The monitor server watches `.claude/split/` and broadcasts handshake/task state to the macOS app.
-
-## FAQ
-
-**Does this cost more?**
-Yes — two sessions = ~2x token usage. But you get 2x throughput and avoid the "ran out of tokens mid-task" problem.
-
-**Can I use more than 2 sessions?**
-Yes. The handshake supports multiple sessions. But coordination overhead grows — 2-3 is the sweet spot.
-
-**What about Anthropic's Agent Teams?**
-Agent Teams is a built-in experimental feature that works differently — one lead session spawns teammates within a single context. claude-split is for two *independent* sessions with separate context windows (= more total tokens). Use Agent Teams when you want autonomous coordination; use claude-split when you want more capacity.
-
-**Does it work with Claude Desktop?**
-You can add Claude Code as MCP servers in Desktop's config to orchestrate from one window. See [docs/COWORK-GUIDE.md](docs/COWORK-GUIDE.md) for setup.
+That's it. Two commands. Everything else happens through the inbox files.
 
 ## License
 
 MIT
-
-## Contributing
-
-Issues and PRs welcome. Keep it simple — the whole tool is <500 lines with zero dependencies.

@@ -1,6 +1,6 @@
 {
   "name": "claude-split",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Run two Claude Code sessions on the same codebase. No conflicts. No wasted tokens.",
   "bin": {
     "claude-split": "./bin/cli.js"

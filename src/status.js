@@ -1,66 +1,70 @@
-import { readState } from "./state.js";
+import { readInbox, pendingMessages } from "./state.js";
 
 export async function status() {
-  const state = readState();
+  const plannerMsgs = readInbox("planner");
+  const executorMsgs = readInbox("executor");
+  const plannerPending = pendingMessages("planner");
+  const executorPending = pendingMessages("executor");
 
-  console.log("=== Claude Split Status ===\n");
+  console.log("  claude-split status\n");
 
-  // Sessions
-  const sessions = Object.entries(state.sessions);
-  if (sessions.length === 0) {
-    console.log("Sessions: none registered");
-  } else {
-    console.log("Sessions:");
-    for (const [name, info] of sessions) {
-      const age = timeSince(info.lastSeen);
-      const status = age > 600000 ? "probably dead" : "active";
-      console.log(`  ${name}: ${status} (last seen ${formatAge(age)})`);
-    }
+  // Summary line
+  const totalPending = plannerPending.length + executorPending.length;
+  if (totalPending === 0 && plannerMsgs.length === 0 && executorMsgs.length === 0) {
+    console.log("  No messages yet. Planner writes to inbox-executor.md to assign tasks.");
+    return;
   }
+
+  // Planner inbox (messages FROM executor)
+  printInbox("Planner", plannerMsgs, plannerPending);
 
   console.log("");
 
-  // Tasks
-  if (state.tasks.length === 0) {
-    console.log("Tasks: none");
-    console.log('  Add one: npx claude-split claim "description" --name session-name');
+  // Executor inbox (messages FROM planner)
+  printInbox("Executor", executorMsgs, executorPending);
+
+  // Bottom summary
+  console.log("");
+  if (totalPending > 0) {
+    console.log(`  \x1b[33m${totalPending} pending message${totalPending > 1 ? "s" : ""}\x1b[0m`);
   } else {
-    const open = state.tasks.filter((t) => t.status === "open");
-    const claimed = state.tasks.filter((t) => t.status === "claimed");
-    const done = state.tasks.filter((t) => t.status === "done");
+    console.log("  \x1b[32mAll messages ACK'd\x1b[0m");
+  }
+}
 
-    if (open.length) {
-      console.log(`Open (${open.length}):`);
-      open.forEach((t) => console.log(`  [ ] ${t.id}: ${t.description}`));
-    }
-    if (claimed.length) {
-      console.log(`In progress (${claimed.length}):`);
-      claimed.forEach((t) => console.log(`  [~] ${t.id}: ${t.description} (${t.owner})`));
-    }
-    if (done.length) {
-      console.log(`Done (${done.length}):`);
-      done.forEach((t) => console.log(`  [x] ${t.id}: ${t.description}${t.result ? ` — ${t.result}` : ""}`));
+function printInbox(label, messages, pending) {
+  console.log(`  \x1b[1m${label} inbox\x1b[0m (${messages.length} total, ${pending.length} pending)`);
+
+  if (pending.length > 0) {
+    console.log("  \x1b[33mPending:\x1b[0m");
+    for (const msg of pending) {
+      const badge = typeBadge(msg.type);
+      const pri = msg.priority === "p0" ? " \x1b[31m!!\x1b[0m" : "";
+      console.log(`    ${badge} ${msg.id}: ${truncate(msg.body, 60)}${pri}`);
     }
   }
 
-  // Recent log
-  if (state.log.length > 0) {
-    console.log("\nRecent activity:");
-    state.log.slice(-5).forEach((entry) => {
-      const time = new Date(entry.time).toLocaleTimeString();
-      console.log(`  ${time} [${entry.session}] ${entry.action}: ${entry.detail}`);
-    });
+  // Last 5 ACK'd messages as history
+  const acked = messages.filter((m) => m.acked).slice(-5);
+  if (acked.length > 0) {
+    console.log("  \x1b[2mHistory:\x1b[0m");
+    for (const msg of acked) {
+      console.log(`    \x1b[32m✓\x1b[0m ${msg.id}: ${truncate(msg.body, 55)} \x1b[2m[${msg.ackedBy}]\x1b[0m`);
+    }
   }
-
-  console.log(`\nLast updated: ${state.lastUpdated || "never"}`);
 }
 
-function timeSince(iso) {
-  return Date.now() - new Date(iso).getTime();
+function typeBadge(type) {
+  switch (type) {
+    case "task": return "\x1b[36m[TASK]\x1b[0m";
+    case "result": return "\x1b[32m[RSLT]\x1b[0m";
+    case "question": return "\x1b[33m[ASK?]\x1b[0m";
+    case "block": return "\x1b[31m[BLCK]\x1b[0m";
+    default: return `[${type}]`;
+  }
 }
 
-function formatAge(ms) {
-  if (ms < 60000) return `${Math.round(ms / 1000)}s ago`;
-  if (ms < 3600000) return `${Math.round(ms / 60000)}m ago`;
-  return `${Math.round(ms / 3600000)}h ago`;
+function truncate(text, len) {
+  const oneline = text.replace(/\n/g, " ").trim();
+  return oneline.length > len ? oneline.slice(0, len - 1) + "\u2026" : oneline;
 }
