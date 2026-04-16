@@ -1,0 +1,4 @@
+node_modules/
+.claude/split/
+*.lock
+.DS_Store

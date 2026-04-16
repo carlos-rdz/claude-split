@@ -1,0 +1,40 @@
+{
+  "name": "claude-split",
+  "version": "0.1.0",
+  "description": "Run two Claude Code sessions on the same codebase. No conflicts. No wasted tokens.",
+  "bin": {
+    "claude-split": "./bin/cli.js"
+  },
+  "type": "module",
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "scripts": {
+    "test": "node --test src/**/*.test.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "multi-agent",
+    "coordination",
+    "parallel",
+    "split",
+    "cowork",
+    "anthropic"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carlos-rdz/claude-split.git"
+  },
+  "homepage": "https://github.com/carlos-rdz/claude-split",
+  "bugs": {
+    "url": "https://github.com/carlos-rdz/claude-split/issues"
+  },
+  "author": "Carlos Rodriguez",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
