@@ -139,6 +139,12 @@ claude-split --help
 
 That's it. Two commands. Everything else happens through the inbox files.
 
+## Monitor Dashboard
+
+Want a live web dashboard showing agent status, pending tasks, and message flow?
+
+See [claude-split-monitor](https://github.com/carlos-rdz/claude-split-monitor) — a standalone companion app.
+
 ## License
 
 MIT

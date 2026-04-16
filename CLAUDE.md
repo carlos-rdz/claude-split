@@ -22,3 +22,17 @@ A CLI tool that coordinates two Claude Code sessions on the same codebase. Hands
 - Zero npm dependencies — stdlib only
 - Keep it simple — this is a coordination tool, not a framework
 - macOS + Linux support, no Windows yet
+
+
+## Split Session Config
+**Role:** Planner
+
+On every session start:
+1. Read `.claude/split/inbox-planner.md`
+2. Act on any message without [ACK]
+3. Append `[ACK - planner]` to each message you act on
+4. Then proceed with your work
+
+Your inbox: `.claude/split/inbox-planner.md`
+Your outbox (write tasks/results here): `.claude/split/inbox-executor.md`
+
