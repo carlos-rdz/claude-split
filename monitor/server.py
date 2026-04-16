@@ -138,12 +138,12 @@ async def poll_loop():
 async def process_request(connection, request):
     if request.path in ('/', ''):
         html = HERE / 'dashboard.html'
-        body = html.read_bytes() if html.exists() else b'<h1>dashboard.html not found</h1>'
+        body = html.read_text() if html.exists() else '<h1>dashboard.html not found</h1>'
         response = connection.respond(HTTPStatus.OK, body)
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
     if request.path == '/api/state':
-        body = json.dumps(compute_state()).encode()
+        body = json.dumps(compute_state())
         response = connection.respond(HTTPStatus.OK, body)
         response.headers['Content-Type'] = 'application/json'
         return response
